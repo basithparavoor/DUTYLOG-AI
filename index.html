@@ -12,7 +12,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://unpkg.com/docx@9.5.1/build/index.js"></script>
-<link rel="stylesheet" href="style.css">
+<link rel="icon" href="/favicon.ico"><link rel="apple-touch-icon" href="/logo.png"><link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="toast" aria-live="polite"></div>
@@ -20,7 +20,7 @@
 
 <section id="authView" class="auth-shell">
   <div class="auth-card">
-    <div class="logo-mark">D</div>
+    <img class="logo-mark institution-logo" src="/logo.png" alt="Institution logo" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="logo-mark fallback-logo" style="display:none">D</div>
     <div class="eyebrow">Thaiba Garden Group of Institutions</div>
     <h1>DUTYLOG <span>AI</span></h1>
     <p>Daily Duty Report &amp; Institutional Work Journal</p>
@@ -33,7 +33,7 @@
   <div class="app-noise" aria-hidden="true"></div>
   <aside class="sidebar" id="sidebar">
     <div class="brand">
-      <div class="brand-mark">D</div>
+      <img class="brand-mark institution-logo" src="/logo.png" alt="Institution logo" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="brand-mark fallback-logo" style="display:none">D</div>
       <div><b>DUTYLOG <span>AI</span></b><small>Institutional Journal</small></div>
     </div>
     <nav id="nav" aria-label="Main navigation"></nav>

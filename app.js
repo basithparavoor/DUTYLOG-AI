@@ -1,76 +1,791 @@
-const SUPABASE_URL='https://lksdkaiwvkcvjrfcqcpc.supabase.co';
-const SUPABASE_KEY='sb_publishable_lzFKFj0DBgI49MC4anKtEw_TMSajPTx';
-const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
-const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-let me=null, profile=null, view='dashboard', reports=[], people=[], departments=[], positions=[];
-const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-function toast(t){$('#toast').innerHTML=`<div class="notice" style="position:fixed;right:18px;bottom:18px;z-index:99;box-shadow:var(--shadow)">${esc(t)}</div>`;setTimeout(()=>$('#toast').innerHTML='',2800)}
-function initials(n){return String(n||'U').split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase()}
-function fmt(d){return new Date(d+'T00:00:00').toLocaleDateString(undefined,{day:'2-digit',month:'short',year:'numeric'})}
-async function init(){const {data:{session}}=await sb.auth.getSession(); if(session) await enter(session); $('#googleBtn').onclick=()=>sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname}}); $('#signout').onclick=()=>sb.auth.signOut(); $('#menu').onclick=()=>$('#sidebar').classList.toggle('open'); $('#themeToggle').onclick=toggleTheme; applyTheme(); sb.auth.onAuthStateChange(async(e,s)=>{if(e==='SIGNED_IN'&&s) await enter(s);if(e==='SIGNED_OUT'){location.reload()}})}
-function applyTheme(){const saved=localStorage.getItem('dutylog_theme')||'light';document.documentElement.dataset.theme=saved;const b=$('#themeToggle');if(b)b.textContent=saved==='dark'?'☾':'☼'}
-function toggleTheme(){const next=document.documentElement.dataset.theme==='dark'?'light':'dark';localStorage.setItem('dutylog_theme',next);applyTheme()}
-async function enter(session){me=session.user; const {data,error}=await sb.from('profiles').select('*,departments(name),positions(title)').eq('id',me.id).single(); if(error){toast(error.message);return} profile=data; $('#authView').classList.add('hidden');$('#app').classList.remove('hidden');$('#sideName').textContent=profile.full_name;$('#sideRole').textContent=profile.role.replace('_',' ').toUpperCase();$('#sideAvatar').textContent=initials(profile.full_name); buildNav(); await load(); render()}
-function buildNav(){let items=[['dashboard','⌂','Dashboard'],['reports','▤','My Reports'],['calendar','▦','Calendar'],['generator','✦','Report Generator']];if(profile.role==='joint_director'||profile.role==='admin')items.push(['verification','✓','Verification'],['staff','♙','Staff & Hierarchy']);if(profile.role==='admin')items.push(['users','♟','Users'],['departments','▦','Departments'],['positions','◆','Positions'],['settings','⚙','Settings']);const markup=items.map(x=>`<button class="nav ${view===x[0]?'active':''}" data-view="${x[0]}"><i>${x[1]}</i><span>${x[2]}</span></button>`).join('');$('#nav').innerHTML=markup;const mobile=$('#mobileNav');if(mobile)mobile.innerHTML=items.slice(0,5).map(x=>`<button class="mnav ${view===x[0]?'active':''}" data-view="${x[0]}"><i>${x[1]}</i><span>${x[2]}</span></button>`).join('');$$('.nav,.mnav').forEach(b=>b.onclick=()=>{view=b.dataset.view;$('#sidebar').classList.remove('open');render()})}
-async function load(){ $('#syncState').textContent='● Syncing'; const q=profile.role==='staff'?sb.from('reports').select('*').eq('user_id',me.id).order('report_date',{ascending:false}):sb.from('reports').select('*,profiles!reports_user_id_fkey(full_name,email,department_id,position_id)').order('report_date',{ascending:false});let r=await q;reports=r.data||[]; if(r.error)toast(r.error.message); if(profile.role!=='staff'){let p=await sb.from('profiles').select('*,departments(name),positions(title),manager:manager_id(full_name)').order('full_name');people=p.data||[];let d=await sb.from('departments').select('*').order('name');departments=d.data||[];let po=await sb.from('positions').select('*').order('level_no');positions=po.data||[]} $('#syncState').textContent='● Live synced'}
-function setHead(k,t){$('#kicker').textContent=k;$('#title').textContent=t}
-function render(){buildNav();let fn={dashboard:dashboard,reports:reportsPage,calendar:calendar,generator:generator,verification:verification,staff:staff,departments:departmentPage,positions:positionPage,users:usersPage,settings:settings}[view]||dashboard;fn();}
-function shell(title,sub,body,actions=''){setHead('DUTYLOG AI',title);$('#main').innerHTML=`<div class="page-head"><div><h2>${title}</h2><p>${sub}</p></div><div class="actions">${actions}</div></div>${body}`}
-function dashboard(){let total=reports.length,verified=reports.filter(r=>r.verified_at).length,working=reports.filter(r=>r.status==='working').length,leave=reports.filter(r=>r.status==='leave').length;let body=`<div class="grid stats"><div class="stat"><small>Reports</small><b>${total}</b></div><div class="stat"><small>Working days</small><b>${working}</b></div><div class="stat"><small>Leave / holiday</small><b>${leave+reports.filter(r=>r.status==='holiday').length}</b></div><div class="stat"><small>Verified</small><b>${verified}</b></div></div><div class="grid two" style="margin-top:16px"><section class="card"><h3>Recent reports</h3>${reportTable(reports.slice(0,8))}</section><section class="card"><h3>Account</h3><div class="notice">Signed in as <b>${esc(profile.full_name)}</b><br>Role: <b>${esc(profile.role.replace('_',' '))}</b><br>Department: <b>${esc(profile.departments?.name||'Not assigned')}</b><br>Position: <b>${esc(profile.positions?.title||'Not assigned')}</b></div></section></div>`;shell('Dashboard','Your institutional reporting workspace',body,profile.role==='staff'?`<button class="primary" onclick="view='generator';render()">＋ New report</button>`:'')}
-function reportTable(arr){if(!arr.length)return `<div class="empty">No reports found.</div>`;return `<div class="table-wrap"><table class="table"><thead><tr><th>Date</th><th>Staff</th><th>Status</th><th>Verification</th><th></th></tr></thead><tbody>${arr.map(r=>`<tr><td>${fmt(r.report_date)}</td><td>${esc(r.profiles?.full_name||profile.full_name)}</td><td><span class="badge ${r.status==='working'?'b-green':r.status==='leave'?'b-orange':'b-blue'}">${r.status}</span></td><td>${r.verified_at?'<span class="verified">✓ Verified</span>':'<span class="badge b-orange">Pending</span>'}</td><td><button class="ghost" onclick="openReport('${r.id}')">View</button></td></tr>`).join('')}</tbody></table></div>`}
-function reportsPage(){shell('Reports','Search, review and export institutional reports',`<div class="card"><div class="actions"><input id="search" placeholder="Search date, notes, staff..." style="flex:1;min-width:220px;border:1px solid var(--line);border-radius:12px;padding:11px"><select id="filter" style="border:1px solid var(--line);border-radius:12px;padding:11px"><option value="">All</option><option>working</option><option>holiday</option><option>leave</option><option>verified</option><option>pending</option></select></div><div id="reportList" style="margin-top:15px">${reportTable(reports)}</div></div>`);$('#search').oninput=filterReports;$('#filter').onchange=filterReports}
-function filterReports(){let s=$('#search').value.toLowerCase(),f=$('#filter').value;let a=reports.filter(r=>(!s||JSON.stringify(r).toLowerCase().includes(s))&&(!f||(f==='verified'?!!r.verified_at:f==='pending'?!r.verified_at:r.status===f)));$('#reportList').innerHTML=reportTable(a)}
-function generator(){let today=new Date().toISOString().slice(0,10);shell('Report Generator','Record facts first; AI-style formatting must not invent information',`<div class="card"><form id="reportForm" class="form-grid"><div class="field"><label>DATE</label><input id="rdate" type="date" value="${today}"></div><div class="field"><label>STATUS</label><select id="rstatus"><option value="working">Working day</option><option value="holiday">Holiday</option><option value="leave">Leave</option></select></div><div class="field full"><label>KEY NOTES / RAW DUTY NOTES</label><textarea id="notes" placeholder="Enter your actual duties, meetings, classes, reports, follow-ups, visits, etc."></textarea></div><div class="field full"><label>GENERATED PROFESSIONAL REPORT</label><textarea id="generated" placeholder="Click Generate Draft..."></textarea></div><div class="field full"><label>REMARKS</label><input id="remarks" placeholder="Optional"></div><div class="actions full"><button type="button" class="ghost" id="gen">✦ Generate Draft</button><button class="primary">Save Report</button></div></form></div>`);$('#gen').onclick=()=>{$('#generated').value=makeReport($('#notes').value,$('#rdate').value,$('#rstatus').value)};$('#reportForm').onsubmit=saveReport}
-function makeReport(notes,date,status){if(!notes.trim())return '';let intro=status==='working'?`I carried out my assigned institutional duties on ${fmt(date)}. `:status==='leave'?`I was on leave on ${fmt(date)}. `:`The institution observed a holiday on ${fmt(date)}. `;return intro+notes.trim().replace(/\s+/g,' ').split(/(?<=[.!?])\s+/).map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join(' ')}
-async function saveReport(e){e.preventDefault();let date=$('#rdate').value;if(profile.role!=='staff')return toast('Only staff accounts can submit daily reports.');let row={user_id:me.id,report_date:date,status:$('#rstatus').value,notes:$('#notes').value,generated_report:$('#generated').value,remarks:$('#remarks').value};let {error}=await sb.from('reports').upsert(row,{onConflict:'user_id,report_date'});if(error)toast(error.message);else{toast('Report saved');await load();view='reports';render()}}
-function calendar(){let by=new Map(reports.map(r=>[r.report_date,r]));let now=new Date(),y=now.getFullYear(),m=now.getMonth();let first=new Date(y,m,1),days=new Date(y,m+1,0).getDate(),start=first.getDay();let cells='';for(let i=0;i<start;i++)cells+='<div></div>';for(let d=1;d<=days;d++){let k=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`,r=by.get(k);cells+=`<button class="card" style="min-height:70px;padding:10px;text-align:left" onclick="${r?`openReport('${r.id}')`:`view='generator';render()`}"><b>${d}</b><small style="display:block;color:${r?'var(--success)':'var(--muted)'}">${r?(r.verified_at?'✓ Verified':r.status):'—'}</small></button>`}shell('Calendar','Current month reporting activity',`<div class="card"><h3>${now.toLocaleDateString(undefined,{month:'long',year:'numeric'})}</h3><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px">${cells}</div></div>`)}
-function verification(){let pending=reports.filter(r=>!r.verified_at);shell('Verification','Joint Director verification locks the selected reports from further editing',`<div class="card"><div class="notice locked">Once verified, reports cannot be edited or deleted. Verification is enforced in Supabase, not only in the interface.</div><div class="form-grid" style="margin-top:15px"><div class="field"><label>SCOPE</label><select id="vs"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div><div class="field"><label>START DATE</label><input id="vstart" type="date"></div><div class="field"><label>END DATE</label><input id="vend" type="date"></div><div class="field full"><label>VERIFICATION NOTE</label><input id="vnote" placeholder="Optional"></div></div><button class="primary" id="verifyBtn" style="margin-top:14px">✓ Verify Period</button></div><section class="card" style="margin-top:16px"><h3>Pending reports (${pending.length})</h3>${reportTable(pending)}</section>`);$('#verifyBtn').onclick=verifyPeriod}
-async function verifyPeriod(){let a=$('#vstart').value,b=$('#vend').value;if(!a||!b||a>b)return toast('Select a valid date range');let {data,error}=await sb.rpc('verify_report_period',{p_scope:$('#vs').value,p_start:a,p_end:b,p_notes:$('#vnote').value});if(error)toast(error.message);else{toast(`${data} report(s) verified and locked`);await load();render()}}
-function staff(){let rows=people.map(p=>`<tr><td>${esc(p.full_name)}</td><td>${esc(p.email||'')}</td><td>${esc(p.role)}</td><td>${esc(p.departments?.name||'—')}</td><td>${esc(p.positions?.title||'—')}</td><td>${esc(p.manager?.full_name||'Top level')}</td><td>${p.active?'Active':'Inactive'}</td></tr>`).join('');shell('Staff & Hierarchy','View the institutional people structure and reporting lines',`<div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>Staff</th><th>Email</th><th>Role</th><th>Department</th><th>Position</th><th>Reports under</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div></div>`)}
-function usersPage(){
-  const roleOpts=['staff','joint_director','admin'];
-  const rows=people.map(p=>`<tr><td><b>${esc(p.full_name)}</b><br><small>${esc(p.email||'')}</small></td><td><span class="badge ${p.role==='admin'?'b-blue':p.role==='joint_director'?'b-green':'b-orange'}">${esc(p.role.replace('_',' '))}</span></td><td>${esc(p.departments?.name||'—')}</td><td>${esc(p.positions?.title||'—')}</td><td>${esc(p.manager?.full_name||'Top level')}</td><td>${p.active?'Active':'Inactive'}</td><td><button class="ghost" onclick="editUser('${p.id}')">Manage</button></td></tr>`).join('');
-  shell('Users','Admin-only user creation and staff account management',`<div class="grid two"><section class="card"><h3>Invite new user</h3><p class="muted">The user receives a Google/Supabase invitation. After signing in, their profile is assigned the selected role and hierarchy.</p><div class="form-grid"><div class="field"><label>FULL NAME</label><input id="u_name" placeholder="Staff name"></div><div class="field"><label>EMAIL</label><input id="u_email" type="email" placeholder="staff@example.com"></div><div class="field"><label>ROLE</label><select id="u_role">${roleOpts.map(x=>`<option value="${x}">${x.replace('_',' ')}</option>`).join('')}</select></div><div class="field"><label>DEPARTMENT</label><select id="u_dep"><option value="">Not assigned</option>${departments.map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('')}</select></div><div class="field"><label>POSITION</label><select id="u_pos"><option value="">Not assigned</option>${positions.map(x=>`<option value="${x.id}">${esc(x.title)}</option>`).join('')}</select></div><div class="field"><label>REPORTS UNDER</label><select id="u_mgr"><option value="">Top level</option>${people.filter(x=>x.active).map(x=>`<option value="${x.id}">${esc(x.full_name)}</option>`).join('')}</select></div></div><button class="primary" style="margin-top:14px" onclick="inviteUser()">＋ Send invitation</button><div class="notice" style="margin-top:12px">Requires the <b>admin-users</b> Supabase Edge Function to be deployed with its service-role secret server-side.</div></section><section class="card"><h3>Institutional access</h3><p class="muted">Google Sign-In is the authentication method. Role, department, position and reporting hierarchy are controlled by the Admin.</p><div class="chips"><span class="chip">Admin</span><span class="chip">Joint Director</span><span class="chip">Staff</span></div></section></div><section class="card" style="margin-top:16px"><h3>All users</h3><div class="table-wrap"><table class="table"><thead><tr><th>User</th><th>Role</th><th>Department</th><th>Position</th><th>Reports under</th><th>Status</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="7">No users found.</td></tr>'}</tbody></table></div></section>`);
-}
-async function inviteUser(){
-  const email=$('#u_email').value.trim(), name=$('#u_name').value.trim();
-  if(!email||!name)return toast('Enter the user name and email');
-  const {data,error}=await sb.functions.invoke('admin-users',{body:{email,full_name:name,role:$('#u_role').value,department_id:$('#u_dep').value||null,position_id:$('#u_pos').value||null,manager_id:$('#u_mgr').value||null}});
-  if(error)toast(error.message); else if(data?.error)toast(data.error); else {toast('Invitation sent');await load();render()}
-}
-function editUser(id){
-  const p=people.find(x=>x.id===id); if(!p)return;
-  $('#modalBack').classList.remove('hidden');
-  $('#modal').innerHTML=`<div class="modal-head"><div><h2 style="margin:0">Manage User</h2><small>${esc(p.email||'')}</small></div><button class="ghost" onclick="closeModal()">Close</button></div><div class="form-grid"><div class="field"><label>FULL NAME</label><input id="e_name" value="${esc(p.full_name)}"></div><div class="field"><label>ROLE</label><select id="e_role"><option value="staff">Staff</option><option value="joint_director">Joint Director</option><option value="admin">Admin</option></select></div><div class="field"><label>DEPARTMENT</label><select id="e_dep"><option value="">Not assigned</option>${departments.map(d=>`<option value="${d.id}" ${p.department_id===d.id?'selected':''}>${esc(d.name)}</option>`).join('')}</select></div><div class="field"><label>POSITION</label><select id="e_pos"><option value="">Not assigned</option>${positions.map(x=>`<option value="${x.id}" ${p.position_id===x.id?'selected':''}>${esc(x.title)}</option>`).join('')}</select></div><div class="field"><label>REPORTS UNDER</label><select id="e_mgr"><option value="">Top level</option>${people.filter(x=>x.id!==p.id).map(x=>`<option value="${x.id}" ${p.manager_id===x.id?'selected':''}>${esc(x.full_name)}</option>`).join('')}</select></div><div class="field"><label>ACCOUNT STATUS</label><select id="e_active"><option value="true" ${p.active?'selected':''}>Active</option><option value="false" ${!p.active?'selected':''}>Inactive</option></select></div></div><div class="actions" style="margin-top:16px"><button class="primary" onclick="saveUser('${id}')">Save changes</button></div>`;
-  $('#e_role').value=p.role;
-}
-async function saveUser(id){
-  const {error}=await sb.from('profiles').update({full_name:$('#e_name').value.trim(),role:$('#e_role').value,department_id:$('#e_dep').value||null,position_id:$('#e_pos').value||null,manager_id:$('#e_mgr').value||null,active:$('#e_active').value==='true'}).eq('id',id);
-  if(error)toast(error.message);else{toast('User updated');closeModal();await load();render()}
-}
-function departmentPage(){shell('Departments','Admin management of departments',`<div class="card"><div class="actions"><input id="dn" placeholder="New department" style="flex:1;border:1px solid var(--line);border-radius:12px;padding:11px"><button class="primary" onclick="addDepartment()">Add</button></div><div class="chips" style="margin-top:16px">${departments.map(d=>`<span class="chip">${esc(d.name)}</span>`).join('')}</div></div>`)}
-async function addDepartment(){let n=$('#dn').value.trim();if(!n)return;let {error}=await sb.from('departments').insert({name:n});if(error)toast(error.message);else{await load();render()}}
-function positionPage(){shell('Positions','Admin management of staff positions',`<div class="card"><div class="actions"><input id="pn" placeholder="Position title" style="flex:1;border:1px solid var(--line);border-radius:12px;padding:11px"><input id="pl" type="number" value="1" min="1" style="width:90px;border:1px solid var(--line);border-radius:12px;padding:11px"><button class="primary" onclick="addPosition()">Add</button></div><div class="chips" style="margin-top:16px">${positions.map(p=>`<span class="chip">${esc(p.title)} · L${p.level_no}</span>`).join('')}</div></div>`)}
-async function addPosition(){let n=$('#pn').value.trim();if(!n)return;let {error}=await sb.from('positions').insert({title:n,level_no:+$('#pl').value||1});if(error)toast(error.message);else{await load();render()}}
-function settings(){shell('Settings','Account and security configuration',`<div class="grid two"><section class="card"><h3>Profile</h3><div class="notice"><b>${esc(profile.full_name)}</b><br>${esc(profile.email||me.email)}<br>Role: ${esc(profile.role)}</div></section><section class="card"><h3>Security</h3><p style="color:var(--muted);font-size:13px">Authentication is handled by Supabase Auth with Google OAuth. Database permissions are enforced using Postgres Row Level Security.</p></section></div>`)}
-async function openReport(id){let r=reports.find(x=>x.id===id);if(!r)return;let canEdit=profile.role==='staff'&&r.user_id===me.id&&!r.verified_at;$('#modalBack').classList.remove('hidden');$('#modal').innerHTML=`<div class="modal-head"><div><h2 style="margin:0">Daily Duty Report</h2><small>${fmt(r.report_date)} · ${esc(r.profiles?.full_name||profile.full_name)}</small></div><button class="ghost" onclick="closeModal()">Close</button></div>${r.verified_at?'<div class="notice locked">✓ Verified by Joint Director. This report is locked.</div>':''}<article id="paper" class="report-paper"><h1>DAILY DUTY REPORT</h1><div class="meta">Thaiba Garden Group of Institutions · ${fmt(r.report_date)}</div><p><b>Staff:</b> ${esc(r.profiles?.full_name||profile.full_name)}</p><p><b>Status:</b> ${esc(r.status)}</p><p>${esc(r.generated_report||r.notes||'No report text')}</p>${r.remarks?`<p><b>Remarks:</b> ${esc(r.remarks)}</p>`:''}<hr><p style="font-size:12px;color:#6d7890">${r.verified_at?`Verified on ${new Date(r.verified_at).toLocaleString()}`:'Pending verification'}</p></article><div class="actions" style="margin-top:15px"><button class="ghost" onclick="exportPDF('${id}')">PDF</button><button class="ghost" onclick="exportDOCX('${id}')">DOCX</button><button class="ghost" onclick="window.print()">Print</button>${canEdit?`<button class="danger" onclick="deleteReport('${id}')">Delete</button>`:''}</div>`}
-function closeModal(){$('#modalBack').classList.add('hidden')}
-async function deleteReport(id){if(!confirm('Delete this report?'))return;let {error}=await sb.from('reports').delete().eq('id',id);if(error)toast(error.message);else{closeModal();await load();render()}}
-function exportPDF(id){let r=reports.find(x=>x.id===id);const {jsPDF}=window.jspdf;let doc=new jsPDF({format:'a4',unit:'mm'});doc.setFont('helvetica','bold');doc.setFontSize(16);doc.text('DAILY DUTY REPORT',105,22,{align:'center'});doc.setFontSize(10);doc.setFont('helvetica','normal');doc.text('Thaiba Garden Group of Institutions',105,29,{align:'center'});let y=42;doc.setFont('helvetica','bold');doc.text('Staff:',20,y);doc.setFont('helvetica','normal');doc.text(r.profiles?.full_name||profile.full_name,38,y);y+=8;doc.setFont('helvetica','bold');doc.text('Date:',20,y);doc.setFont('helvetica','normal');doc.text(fmt(r.report_date),38,y);y+=12;let lines=doc.splitTextToSize(r.generated_report||r.notes||'',170);doc.text(lines,20,y);y+=lines.length*5+12;if(r.remarks){doc.setFont('helvetica','bold');doc.text('Remarks:',20,y);doc.setFont('helvetica','normal');doc.text(doc.splitTextToSize(r.remarks,160),42,y)}doc.save(`DUTYLOG_${r.report_date}.pdf`)}
-async function exportDOCX(id){
-  const r=reports.find(x=>x.id===id), D=window.docx;
-  const children=[
-    new D.Paragraph({text:'DAILY DUTY REPORT',heading:D.HeadingLevel.TITLE,alignment:D.AlignmentType.CENTER}),
-    new D.Paragraph({text:'Thaiba Garden Group of Institutions',alignment:D.AlignmentType.CENTER}),
-    new D.Paragraph({text:`Staff: ${r.profiles?.full_name||profile.full_name}`}),
-    new D.Paragraph({text:`Date: ${fmt(r.report_date)}`}),
-    new D.Paragraph({text:r.generated_report||r.notes||''})
-  ];
-  if(r.remarks) children.push(new D.Paragraph({text:`Remarks: ${r.remarks}`}));
-  const doc=new D.Document({sections:[{children}]});
-  const blob=await D.Packer.toBlob(doc), a=document.createElement('a');
-  a.href=URL.createObjectURL(blob); a.download=`DUTYLOG_${r.report_date}.docx`; a.click(); URL.revokeObjectURL(a.href);
+function dashboard(){
+
+  const totalStaff=
+    people.filter(
+      p=>p.active&&p.role==='staff'
+    ).length;
+
+  const submitted=
+    reports.filter(
+      r=>
+        r.status==='working'||
+        r.status==='leave'||
+        r.status==='holiday'
+    ).length;
+
+  const verified=
+    reports.filter(
+      r=>r.verified_at
+    ).length;
+
+  const pending=
+    reports.filter(
+      r=>!r.verified_at
+    ).length;
+
+  if(isManager()){
+
+    const approved=
+      leaves.filter(
+        l=>l.status==='approved'
+      ).length;
+
+    const absent=
+      leaves.filter(
+        l=>
+          l.status==='approved'&&
+          l.start_date<=today()&&
+          l.end_date>=today()
+      ).length;
+
+    const present=
+      Math.max(
+        0,
+        totalStaff-absent
+      );
+
+    const body=`
+
+      <div class="grid stats">
+
+        <div class="stat">
+          <small>Total Staff</small>
+          <b>${totalStaff}</b>
+        </div>
+
+        <div class="stat">
+          <small>Present Today</small>
+          <b>${present}</b>
+        </div>
+
+        <div class="stat">
+          <small>On Leave Today</small>
+          <b>${absent}</b>
+        </div>
+
+        <div class="stat">
+          <small>Reports Pending</small>
+          <b>${pending}</b>
+        </div>
+
+      </div>
+
+      <div
+        class="grid stats"
+        style="margin-top:15px"
+      >
+
+        <div class="stat">
+          <small>Reports Submitted</small>
+          <b>${submitted}</b>
+        </div>
+
+        <div class="stat">
+          <small>Reports Verified</small>
+          <b>${verified}</b>
+        </div>
+
+        <div class="stat">
+          <small>Leave Requests</small>
+          <b>
+            ${
+              leaves.filter(
+                l=>
+                  l.status==='pending'||
+                  l.status==='reapply'
+              ).length
+            }
+          </b>
+        </div>
+
+        <div class="stat">
+          <small>Approved Leave Records</small>
+          <b>${approved}</b>
+        </div>
+
+      </div>
+
+      <div
+        class="grid two"
+        style="margin-top:16px"
+      >
+
+        <section class="card">
+
+          <h3>Recent activity</h3>
+
+          ${reportTable(
+            reports.slice(0,8),
+            true
+          )}
+
+        </section>
+
+        <section class="card">
+
+          <h3>Pending actions</h3>
+
+          ${managerActionSummary()}
+
+        </section>
+
+      </div>
+    `;
+
+    shell(
+      'Dashboard',
+      'Institutional overview and current staff activity',
+      body,
+      `
+        <button
+          class="primary"
+          onclick="view='verification';render()"
+        >
+          Open Review
+        </button>
+      `
+    );
+
+  }else{
+
+    const approvedToday=
+      leaves.some(
+        l=>
+          l.status==='approved'&&
+          l.start_date<=today()&&
+          l.end_date>=today()
+      );
+
+    const body=`
+
+      <div class="grid stats">
+
+        <div class="stat">
+          <small>Reports Submitted</small>
+          <b>${submitted}</b>
+        </div>
+
+        <div class="stat">
+          <small>Reports Verified</small>
+          <b>${verified}</b>
+        </div>
+
+        <div class="stat">
+          <small>Reports Pending</small>
+          <b>${pending}</b>
+        </div>
+
+        <div class="stat">
+          <small>Leave Status</small>
+          <b>
+            ${
+              approvedToday
+              ?'Leave'
+              :'Present'
+            }
+          </b>
+        </div>
+
+      </div>
+
+      <div
+        class="grid two"
+        style="margin-top:16px"
+      >
+
+        <section class="card">
+
+          <h3>Recent reports</h3>
+
+          ${reportTable(
+            reports.slice(0,8)
+          )}
+
+        </section>
+
+        <section class="card">
+
+          <h3>Leave requests</h3>
+
+          ${leaveTable(
+            leaves.slice(0,5)
+          )}
+
+        </section>
+
+      </div>
+    `;
+
+    shell(
+      'Dashboard',
+      'Your work, attendance and leave overview',
+      body,
+      `
+        <button
+          class="primary"
+          onclick="view='generator';render()"
+        >
+          ＋ New Report
+        </button>
+
+        <button
+          class="ghost"
+          onclick="view='leave';render()"
+        >
+          Apply Leave
+        </button>
+      `
+    );
+  }
 }
 
-window.closeModal=closeModal;window.openReport=openReport;window.exportPDF=exportPDF;window.exportDOCX=exportDOCX;window.deleteReport=deleteReport;window.addDepartment=addDepartment;window.addPosition=addPosition;window.verifyPeriod=verifyPeriod;window.inviteUser=inviteUser;window.editUser=editUser;window.saveUser=saveUser;
+function managerActionSummary(){
+
+  const rp=
+    reports.filter(
+      r=>!r.verified_at
+    ).length;
+
+  const lp=
+    leaves.filter(
+      l=>
+        l.status==='pending'||
+        l.status==='reapply'
+    ).length;
+
+  return `
+
+    <div class="notice">
+      ${rp}
+      report${rp===1?'':'s'}
+      awaiting review.
+    </div>
+
+    <div
+      class="notice"
+      style="margin-top:8px"
+    >
+      ${lp}
+      leave request${lp===1?'':'s'}
+      awaiting action.
+    </div>
+  `;
+}
+
+function reportTable(
+  arr,
+  manager=false
+){
+
+  if(!arr.length)
+    return `
+      <div class="empty">
+        No reports found.
+      </div>
+    `;
+
+  return `
+
+    <div class="table-wrap">
+
+      <table class="table">
+
+        <thead>
+
+          <tr>
+
+            <th>Date</th>
+
+            ${
+              manager
+              ?'<th>Staff</th>'
+              :''
+            }
+
+            <th>Status</th>
+            <th>Review</th>
+            <th></th>
+
+          </tr>
+
+        </thead>
+
+        <tbody>
+
+          ${
+            arr.map(
+              r=>`
+
+                <tr>
+
+                  <td>
+                    ${fmt(r.report_date)}
+                  </td>
+
+                  ${
+                    manager
+                    ?`
+                      <td>
+                        ${esc(
+                          r.profiles?.full_name||''
+                        )}
+                      </td>
+                    `
+                    :''
+                  }
+
+                  <td>
+                    ${statusBadge(r.status)}
+                  </td>
+
+                  <td>
+                    ${
+                      r.verified_at
+                      ?statusBadge('verified')
+                      :statusBadge(
+                        r.review_status||'pending'
+                      )
+                    }
+                  </td>
+
+                  <td>
+
+                    <button
+                      class="ghost"
+                      onclick="openReport('${r.id}')"
+                    >
+                      View
+                    </button>
+
+                  </td>
+
+                </tr>
+
+              `
+            ).join('')
+          }
+
+        </tbody>
+
+      </table>
+
+    </div>
+  `;
+}
+
+function reportsPage(){
+
+  shell(
+    'Reports',
+    'Search and review institutional reports',
+    `
+      <div class="card">
+
+        <div class="actions">
+
+          <input
+            id="search"
+            placeholder="Search date, notes, staff..."
+            style="
+              flex:1;
+              min-width:220px;
+              border:1px solid var(--line);
+              border-radius:12px;
+              padding:11px
+            "
+          >
+
+          <select
+            id="filter"
+            style="
+              border:1px solid var(--line);
+              border-radius:12px;
+              padding:11px
+            "
+          >
+
+            <option value="">
+              All
+            </option>
+
+            <option value="pending">
+              Pending
+            </option>
+
+            <option value="check_requested">
+              Check requested
+            </option>
+
+            <option value="verified">
+              Verified
+            </option>
+
+          </select>
+
+        </div>
+
+        <div
+          id="reportResults"
+          style="margin-top:15px"
+        >
+          ${reportTable(
+            reports,
+            isManager()
+          )}
+        </div>
+
+      </div>
+    `
+  );
+
+  const update=()=>{
+
+    const q=
+      ($('#search')?.value||'')
+      .toLowerCase();
+
+    const f=
+      $('#filter')?.value||'';
+
+    const filtered=
+      reports.filter(
+        r=>{
+
+          const text=`
+            ${r.report_date}
+            ${r.notes||''}
+            ${r.generated_report||''}
+            ${r.profiles?.full_name||''}
+          `.toLowerCase();
+
+          const matchesText=
+            !q||text.includes(q);
+
+          const status=
+            r.verified_at
+            ?'verified'
+            :(r.review_status||'pending');
+
+          const matchesFilter=
+            !f||status===f;
+
+          return (
+            matchesText&&
+            matchesFilter
+          );
+        }
+      );
+
+    $('#reportResults').innerHTML=
+      reportTable(
+        filtered,
+        isManager()
+      );
+  };
+
+  $('#search').oninput=update;
+  $('#filter').onchange=update;
+}
+
+function exportStaffPDF(id){
+
+  const p=
+    people.find(
+      x=>x.id===id
+    );
+
+  const {
+    jsPDF
+  }=window.jspdf;
+
+  const doc=
+    new jsPDF({
+      format:'a4',
+      unit:'mm'
+    });
+
+  doc.setFont(
+    'helvetica',
+    'bold'
+  );
+
+  doc.setFontSize(18);
+
+  doc.text(
+    INSTITUTION,
+    105,
+    22,
+    {
+      align:'center'
+    }
+  );
+
+  doc.setFontSize(14);
+
+  doc.text(
+    'STAFF PROFILE',
+    105,
+    32,
+    {
+      align:'center'
+    }
+  );
+
+  doc.setFont(
+    'helvetica',
+    'normal'
+  );
+
+  doc.setFontSize(11);
+
+  let y=50;
+
+  [
+    ['Name',p.full_name],
+    ['Employee Code',p.employee_code||'—'],
+    ['Email',p.email||'—'],
+    ['Phone',p.phone||'—'],
+    ['Address',p.address||'—'],
+    [
+      'Department',
+      p.departments?.name||'—'
+    ],
+    [
+      'Position',
+      p.positions?.title||'—'
+    ],
+    [
+      'Joining Date',
+      fmt(p.joining_date)
+    ],
+    [
+      'Emergency Contact',
+      `${p.emergency_contact||'—'} ${
+        p.emergency_phone||''
+      }`
+    ]
+
+  ].forEach(
+    ([k,v])=>{
+
+      doc.setFont(
+        'helvetica',
+        'bold'
+      );
+
+      doc.text(
+        `${k}:`,
+        20,
+        y
+      );
+
+      doc.setFont(
+        'helvetica',
+        'normal'
+      );
+
+      doc.text(
+        doc.splitTextToSize(
+          String(v),
+          145
+        ),
+        55,
+        y
+      );
+
+      y+=10;
+    }
+  );
+
+  doc.save(
+    `STAFF_${
+      String(p.full_name)
+        .replace(/\s+/g,'_')
+    }.pdf`
+  );
+}
+
+function exportProfilePDF(){
+
+  if(!profile)
+    return;
+
+  const p=profile;
+
+  const {
+    jsPDF
+  }=window.jspdf;
+
+  const doc=
+    new jsPDF({
+      format:'a4',
+      unit:'mm'
+    });
+
+  doc.setFont(
+    'helvetica',
+    'bold'
+  );
+
+  doc.setFontSize(18);
+
+  doc.text(
+    INSTITUTION,
+    105,
+    22,
+    {
+      align:'center'
+    }
+  );
+
+  doc.setFontSize(14);
+
+  doc.text(
+    'STAFF PROFILE',
+    105,
+    32,
+    {
+      align:'center'
+    }
+  );
+
+  doc.setFont(
+    'helvetica',
+    'normal'
+  );
+
+  let y=50;
+
+  [
+    ['Name',p.full_name],
+    [
+      'Email',
+      p.email||me.email
+    ],
+    [
+      'Phone',
+      p.phone||'—'
+    ],
+    [
+      'Address',
+      p.address||'—'
+    ],
+    [
+      'Employee Code',
+      p.employee_code||'—'
+    ],
+    [
+      'Joining Date',
+      fmt(p.joining_date)
+    ],
+    [
+      'Emergency Contact',
+      `${p.emergency_contact||'—'} ${
+        p.emergency_phone||''
+      }`
+    ]
+
+  ].forEach(
+    ([k,v])=>{
+
+      doc.setFont(
+        'helvetica',
+        'bold'
+      );
+
+      doc.text(
+        `${k}:`,
+        20,
+        y
+      );
+
+      doc.setFont(
+        'helvetica',
+        'normal'
+      );
+
+      doc.text(
+        doc.splitTextToSize(
+          String(v),
+          145
+        ),
+        55,
+        y
+      );
+
+      y+=10;
+    }
+  );
+
+  doc.save(
+    'DUTYLOG_Staff_Profile.pdf'
+  );
+}
+
+window.closeModal=
+  closeModal;
+
+window.openReport=
+  openReport;
+
+window.exportPDF=
+  exportPDF;
+
+window.exportDOCX=
+  exportDOCX;
+
+window.exportStaffPDF=
+  exportStaffPDF;
+
+window.exportProfilePDF=
+  exportProfilePDF;
+
+window.deleteReport=
+  deleteReport;
+
+window.addDepartment=
+  addDepartment;
+
+window.addPosition=
+  addPosition;
+
+window.verifyReport=
+  reviewReport;
+
+window.reviewReport=
+  reviewReport;
+
+window.reviewLeave=
+  reviewLeave;
+
+window.editLeave=
+  editLeave;
+
+window.deleteLeave=
+  deleteLeave;
+
+window.downloadAttachment=
+  downloadAttachment;
+
+window.inviteUser=
+  inviteUser;
+
+window.editUser=
+  editUser;
+
+window.saveUser=
+  saveUser;
+
+window.saveInstitutionalDay=
+  saveInstitutionalDay;
+
+window.deleteInstitutionalDay=
+  deleteInstitutionalDay;
+
+window.calendarDay=
+  calendarDay;
+
+window.viewStaff=
+  viewStaff;
+
 init();
