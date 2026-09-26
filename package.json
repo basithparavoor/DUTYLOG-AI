@@ -1,0 +1,9 @@
+{
+  "name": "dutylog-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DUTYLOG AI — Daily Duty Report & Institutional Work Journal",
+  "scripts": {
+    "check": "node --check app.js"
+  }
+}
