@@ -1525,4 +1525,200 @@ window.viewStaff =
           'Staff details are not available.'
         );
       };
+
+      /* =========================================================
+   DUTYLOG AI — APPLICATION INITIALIZATION
+   ========================================================= */
+
+async function init(){
+
+  try{
+
+    /* -----------------------------------------
+       Google Login
+       ----------------------------------------- */
+
+    const googleBtn =
+      document.getElementById('googleBtn');
+
+    if(googleBtn){
+
+      googleBtn.onclick = async () => {
+
+        const {
+          error
+        } = await sb.auth.signInWithOAuth({
+
+          provider:'google',
+
+          options:{
+            redirectTo:
+              window.location.origin +
+              window.location.pathname
+          }
+
+        });
+
+        if(error)
+          toast(
+            'Google sign-in failed: ' +
+            error.message
+          );
+      };
+    }
+
+
+    /* -----------------------------------------
+       Sign Out
+       ----------------------------------------- */
+
+    const signout =
+      document.getElementById('signout');
+
+    if(signout){
+
+      signout.onclick = async () => {
+
+        const {
+          error
+        } = await sb.auth.signOut();
+
+        if(error)
+          toast(error.message);
+
+      };
+    }
+
+
+    /* -----------------------------------------
+       Mobile Menu
+       ----------------------------------------- */
+
+    const menu =
+      document.getElementById('menu');
+
+    if(menu){
+
+      menu.onclick = () => {
+
+        const sidebar =
+          document.getElementById('sidebar');
+
+        if(sidebar)
+          sidebar.classList.toggle('open');
+
+      };
+
+    }
+
+
+    /* -----------------------------------------
+       Theme
+       ----------------------------------------- */
+
+    applyTheme();
+
+
+    const themeToggle =
+      document.getElementById(
+        'themeToggle'
+      );
+
+    if(themeToggle){
+
+      themeToggle.onclick =
+        toggleTheme;
+
+    }
+
+
+    /* -----------------------------------------
+       Check Existing Session
+       ----------------------------------------- */
+
+    const {
+      data:{
+        session
+      }
+    } =
+      await sb.auth.getSession();
+
+
+    if(session){
+
+      await enter(session);
+
+    }
+    else{
+
+      const authView =
+        document.getElementById(
+          'authView'
+        );
+
+      const app =
+        document.getElementById(
+          'app'
+        );
+
+      if(authView)
+        authView.classList.remove(
+          'hidden'
+        );
+
+      if(app)
+        app.classList.add(
+          'hidden'
+        );
+
+    }
+
+
+    /* -----------------------------------------
+       Authentication State Listener
+       ----------------------------------------- */
+
+    sb.auth.onAuthStateChange(
+      async (
+        event,
+        session
+      ) => {
+
+        if(
+          event === 'SIGNED_IN' &&
+          session
+        ){
+
+          await enter(session);
+
+        }
+
+        if(
+          event === 'SIGNED_OUT'
+        ){
+
+          window.location.reload();
+
+        }
+
+      }
+    );
+
+
+  }catch(error){
+
+    console.error(
+      'DUTYLOG initialization error:',
+      error
+    );
+
+    toast(
+      'Application initialization failed: ' +
+      error.message
+    );
+
+  }
+
+}
+
 init();
