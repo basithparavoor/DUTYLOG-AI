@@ -722,6 +722,23 @@ function exportProfilePDF(){
   );
 }
 
+
+function closeModal(){
+
+  const modalBack =
+    document.getElementById('modalBack');
+
+  if(modalBack){
+    modalBack.classList.add('hidden');
+  }
+
+  const modal =
+    document.getElementById('modal');
+
+  if(modal){
+    modal.innerHTML='';
+  }
+}
 window.closeModal=
   closeModal;
 
