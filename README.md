@@ -1,3 +1,9 @@
+# DUTYLOG AI — Premium Institutional Edition
+
+Frontend rebuilt with a premium institutional SaaS interface while preserving the Supabase/Auth/database architecture.
+
+Production domain: `https://dutylog.clubad.space`
+
 # DUTYLOG AI — Complete Supabase Edition
 
 Daily Duty Report & Institutional Work Journal for Thaiba Garden Group of Institutions.

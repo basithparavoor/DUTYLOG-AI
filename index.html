@@ -1,34 +1,64 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0b1730"><title>DUTYLOG AI</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f1d35">
+<meta name="description" content="DUTYLOG AI — Daily Duty Report & Institutional Work Journal">
+<title>DUTYLOG AI — Institutional Work Journal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650;700;750;800&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://unpkg.com/docx@9.5.1/build/index.js"></script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="toast"></div>
-<div id="authView" class="auth-shell">
+<div id="toast" aria-live="polite"></div>
+<div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
+
+<section id="authView" class="auth-shell">
   <div class="auth-card">
-    <div class="logo-mark">D</div><div class="eyebrow">THAIBA GARDEN GROUP OF INSTITUTIONS</div>
-    <h1>DUTYLOG <span>AI</span></h1><p>Daily Duty Report &amp; Institutional Work Journal</p>
+    <div class="logo-mark">D</div>
+    <div class="eyebrow">Thaiba Garden Group of Institutions</div>
+    <h1>DUTYLOG <span>AI</span></h1>
+    <p>Daily Duty Report &amp; Institutional Work Journal</p>
     <button id="googleBtn" class="google-btn"><span>G</span> Continue with Google</button>
-    <small>Authorized institutional accounts only.</small>
+    <small>Authorized institutional accounts only · Secure authentication</small>
   </div>
-</div>
+</section>
+
 <div id="app" class="hidden">
-<aside class="sidebar" id="sidebar">
-  <div class="brand"><div class="brand-mark">D</div><div><b>DUTYLOG <span>AI</span></b><small>Institutional Journal</small></div></div>
-  <nav id="nav"></nav>
-  <div class="side-user"><div id="sideAvatar" class="avatar">U</div><div><b id="sideName">User</b><small id="sideRole">Staff</small></div></div>
-</aside>
-<div class="shell"><header class="topbar"><button class="icon mobile" id="menu">☰</button><div><small id="kicker">Overview</small><strong id="title">Dashboard</strong></div><div class="top-actions"><span id="syncState" class="sync">● Offline</span><button id="signout" class="ghost">Sign out</button></div></header>
-<main id="main"></main></div>
+  <div class="app-noise" aria-hidden="true"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">D</div>
+      <div><b>DUTYLOG <span>AI</span></b><small>Institutional Journal</small></div>
+    </div>
+    <nav id="nav" aria-label="Main navigation"></nav>
+    <div class="side-user">
+      <div id="sideAvatar" class="avatar">U</div>
+      <div><b id="sideName">User</b><small id="sideRole">Staff</small></div>
+    </div>
+  </aside>
+
+  <div class="shell">
+    <header class="topbar">
+      <button class="mobile" id="menu" aria-label="Open navigation">☰</button>
+      <div><small id="kicker">Overview</small><strong id="title">Dashboard</strong></div>
+      <div class="top-actions">
+        <span id="syncState" class="sync"><span class="pulse-dot"></span> Live</span>
+        <button id="themeToggle" class="icon-btn" aria-label="Toggle theme">☼</button>
+        <button id="signout" class="ghost">Sign out</button>
+      </div>
+    </header>
+    <main id="main"></main>
+  </div>
+  <nav id="mobileNav" class="mobile-nav" aria-label="Mobile navigation"></nav>
 </div>
-<div id="modalBack" class="modal-back hidden"><section id="modal" class="modal"></section></div>
+
+<div id="modalBack" class="modal-back hidden"><section id="modal" class="modal" role="dialog" aria-modal="true"></section></div>
 <script src="app.js"></script>
-</body></html>
+</body>
+</html>
