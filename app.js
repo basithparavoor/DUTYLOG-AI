@@ -723,86 +723,806 @@ function exportProfilePDF(){
 }
 
 
+/* =========================================================
+   DUTYLOG AI — GLOBAL FUNCTIONS & MODAL SYSTEM
+   ========================================================= */
+
 function closeModal(){
 
-  const modalBack =
+  const back =
     document.getElementById('modalBack');
-
-  if(modalBack){
-    modalBack.classList.add('hidden');
-  }
 
   const modal =
     document.getElementById('modal');
 
-  if(modal){
+  if(back)
+    back.classList.add('hidden');
+
+  if(modal)
     modal.innerHTML='';
-  }
 }
-window.closeModal=
+
+
+/* =========================================================
+   REPORT VIEW
+   ========================================================= */
+
+function openReport(id){
+
+  const r =
+    reports.find(x => x.id === id);
+
+  if(!r){
+    toast('Report not found.');
+    return;
+  }
+
+  const back =
+    document.getElementById('modalBack');
+
+  const modal =
+    document.getElementById('modal');
+
+  if(!back || !modal)
+    return;
+
+  back.classList.remove('hidden');
+
+  modal.innerHTML = `
+
+    <div class="modal-head">
+
+      <div>
+        <h2>Daily Duty Report</h2>
+
+        <small>
+          ${fmt(r.report_date)}
+          ·
+          ${esc(
+            r.profiles?.full_name ||
+            profile?.full_name ||
+            ''
+          )}
+        </small>
+      </div>
+
+      <button
+        class="ghost"
+        onclick="closeModal()"
+      >
+        Close
+      </button>
+
+    </div>
+
+    ${
+      r.review_status === 'check_requested'
+      ? `
+        <div class="notice">
+
+          <b>Review Requested</b>
+
+          <br>
+
+          ${esc(
+            r.review_remarks ||
+            'Please review and resubmit this report.'
+          )}
+
+        </div>
+      `
+      : ''
+    }
+
+    <article
+      id="paper"
+      class="report-paper"
+    >
+
+      <h1>DAILY DUTY REPORT</h1>
+
+      <div class="meta">
+        ${esc(INSTITUTION)}
+        ·
+        ${fmt(r.report_date)}
+      </div>
+
+      <p>
+        <b>Staff:</b>
+        ${esc(
+          r.profiles?.full_name ||
+          profile?.full_name ||
+          ''
+        )}
+      </p>
+
+      <p>
+        <b>Status:</b>
+        ${esc(roleName(r.status))}
+      </p>
+
+      <div class="report-content">
+        ${esc(
+          r.generated_report ||
+          r.notes ||
+          'No report content available.'
+        ).replace(/\n/g,'<br>')}
+      </div>
+
+      ${
+        r.remarks
+        ? `
+          <p>
+            <b>Remarks:</b>
+            ${esc(r.remarks)}
+          </p>
+        `
+        : ''
+      }
+
+      <hr>
+
+      <p class="report-review">
+
+        <b>Review Status:</b>
+
+        ${
+          r.verified_at
+          ? 'Verified'
+          : roleName(
+              r.review_status ||
+              'pending'
+            )
+        }
+
+      </p>
+
+    </article>
+
+    <div
+      class="actions"
+      style="margin-top:16px"
+    >
+
+      <button
+        class="ghost"
+        onclick="exportPDF('${r.id}')"
+      >
+        Export PDF
+      </button>
+
+      <button
+        class="ghost"
+        onclick="exportDOCX('${r.id}')"
+      >
+        Export DOCX
+      </button>
+
+      ${
+        isManager() && !r.verified_at
+        ? `
+          <button
+            class="primary"
+            onclick="
+              reviewReport(
+                '${r.id}',
+                'verify'
+              )
+            "
+          >
+            ✓ Verify
+          </button>
+
+          <button
+            class="ghost"
+            onclick="
+              reviewReport(
+                '${r.id}',
+                'request_check'
+              )
+            "
+          >
+            Request Check
+          </button>
+        `
+        : ''
+      }
+
+      ${
+        !isManager() &&
+        r.user_id === me?.id &&
+        !r.verified_at &&
+        (
+          r.review_status === 'pending' ||
+          r.review_status === 'check_requested' ||
+          !r.review_status
+        )
+        ? `
+          <button
+            class="ghost"
+            onclick="
+              closeModal();
+              view='generator';
+              render();
+            "
+          >
+            Edit / Resubmit
+          </button>
+
+          <button
+            class="danger"
+            onclick="
+              deleteReport('${r.id}')
+            "
+          >
+            Delete
+          </button>
+        `
+        : ''
+      }
+
+    </div>
+  `;
+}
+
+
+/* =========================================================
+   REPORT REVIEW
+   ========================================================= */
+
+async function reviewReport(
+  id,
+  action
+){
+
+  const r =
+    reports.find(x => x.id === id);
+
+  if(!r){
+    toast('Report not found.');
+    return;
+  }
+
+  if(action === 'verify'){
+
+    const {error} =
+      await sb
+        .from('reports')
+        .update({
+          verified_at:
+            new Date().toISOString(),
+
+          verified_by:
+            me.id,
+
+          review_status:
+            'verified'
+        })
+        .eq('id',id);
+
+    if(error){
+      toast(error.message);
+      return;
+    }
+
+    closeModal();
+
+    toast(
+      'Report verified successfully.'
+    );
+  }
+
+  if(action === 'request_check'){
+
+    const remarks =
+      prompt(
+        'Enter the instructions for the staff member:'
+      );
+
+    if(remarks === null)
+      return;
+
+    const {error} =
+      await sb
+        .from('reports')
+        .update({
+          review_status:
+            'check_requested',
+
+          review_remarks:
+            remarks,
+
+          verified_at:
+            null,
+
+          verified_by:
+            null
+        })
+        .eq('id',id);
+
+    if(error){
+      toast(error.message);
+      return;
+    }
+
+    closeModal();
+
+    toast(
+      'Check request sent to staff.'
+    );
+  }
+
+  await load();
+  render();
+}
+
+
+/* =========================================================
+   DELETE REPORT
+   ========================================================= */
+
+async function deleteReport(id){
+
+  if(
+    !confirm(
+      'Are you sure you want to delete this report?'
+    )
+  )
+    return;
+
+  const {error} =
+    await sb
+      .from('reports')
+      .delete()
+      .eq('id',id)
+      .eq('user_id',me.id);
+
+  if(error){
+    toast(error.message);
+    return;
+  }
+
+  closeModal();
+
+  await load();
+
+  toast(
+    'Report deleted successfully.'
+  );
+
+  render();
+}
+
+
+/* =========================================================
+   DEPARTMENTS
+   ========================================================= */
+
+async function addDepartment(){
+
+  const input =
+    document.getElementById('dn');
+
+  const name =
+    input?.value.trim();
+
+  if(!name){
+    toast('Enter a department name.');
+    return;
+  }
+
+  const {error} =
+    await sb
+      .from('departments')
+      .insert({
+        name
+      });
+
+  if(error){
+    toast(error.message);
+    return;
+  }
+
+  toast(
+    'Department added successfully.'
+  );
+
+  await load();
+
+  render();
+}
+
+
+/* =========================================================
+   POSITIONS
+   ========================================================= */
+
+async function addPosition(){
+
+  const name =
+    document.getElementById('pn')
+      ?.value.trim();
+
+  const level =
+    Number(
+      document.getElementById('pl')
+        ?.value || 1
+    );
+
+  if(!name){
+    toast('Enter a position title.');
+    return;
+  }
+
+  const {error} =
+    await sb
+      .from('positions')
+      .insert({
+        title:name,
+        level_no:level
+      });
+
+  if(error){
+    toast(error.message);
+    return;
+  }
+
+  toast(
+    'Position added successfully.'
+  );
+
+  await load();
+
+  render();
+}
+
+
+/* =========================================================
+   LEAVE REVIEW
+   ========================================================= */
+
+async function reviewLeave(id){
+
+  const l =
+    leaves.find(x => x.id === id);
+
+  if(!l){
+    toast('Leave request not found.');
+    return;
+  }
+
+  const back =
+    document.getElementById('modalBack');
+
+  const modal =
+    document.getElementById('modal');
+
+  back.classList.remove('hidden');
+
+  modal.innerHTML = `
+
+    <div class="modal-head">
+
+      <div>
+
+        <h2>Leave Request</h2>
+
+        <small>
+          ${fmt(l.start_date)}
+          –
+          ${fmt(l.end_date)}
+        </small>
+
+      </div>
+
+      <button
+        class="ghost"
+        onclick="closeModal()"
+      >
+        Close
+      </button>
+
+    </div>
+
+    <div class="notice">
+
+      <b>
+        ${esc(
+          l.profiles?.full_name ||
+          'Staff Member'
+        )}
+      </b>
+
+      <br><br>
+
+      <b>Leave Type:</b>
+      ${esc(
+        roleName(
+          l.leave_type ||
+          'Leave'
+        )
+      )}
+
+      <br><br>
+
+      <b>Reason:</b>
+
+      <br>
+
+      ${esc(
+        l.reason ||
+        l.leave_reason ||
+        'No reason provided.'
+      )}
+
+    </div>
+
+    <div class="field">
+
+      <label>REVIEW REMARKS</label>
+
+      <textarea
+        id="leaveRemarks"
+        rows="5"
+        placeholder="Add remarks or instructions..."
+      >${esc(
+        l.review_remarks || ''
+      )}</textarea>
+
+    </div>
+
+    <div class="actions">
+
+      <button
+        class="primary"
+        onclick="
+          processLeave(
+            '${l.id}',
+            'approved'
+          )
+        "
+      >
+        ✓ Approve
+      </button>
+
+      <button
+        class="danger"
+        onclick="
+          processLeave(
+            '${l.id}',
+            'rejected'
+          )
+        "
+      >
+        Reject
+      </button>
+
+      <button
+        class="ghost"
+        onclick="
+          processLeave(
+            '${l.id}',
+            'reapply'
+          )
+        "
+      >
+        Request Reapply
+      </button>
+
+    </div>
+
+  `;
+}
+
+
+/* =========================================================
+   LEAVE PROCESSING
+   ========================================================= */
+
+async function processLeave(
+  id,
+  status
+){
+
+  const remarks =
+    document.getElementById(
+      'leaveRemarks'
+    )?.value.trim() || null;
+
+  const {error} =
+    await sb
+      .from('leave_requests')
+      .update({
+
+        status,
+
+        review_remarks:
+          remarks,
+
+        reviewed_by:
+          me.id,
+
+        reviewed_at:
+          new Date().toISOString()
+
+      })
+      .eq('id',id);
+
+  if(error){
+    toast(error.message);
+    return;
+  }
+
+  closeModal();
+
+  toast(
+    status === 'approved'
+      ? 'Leave approved.'
+      : status === 'rejected'
+        ? 'Leave rejected.'
+        : 'Reapply request sent.'
+  );
+
+  await load();
+
+  render();
+}
+
+
+/* =========================================================
+   GLOBAL EXPORTS
+   ========================================================= */
+
+window.closeModal =
   closeModal;
 
-window.openReport=
+window.openReport =
   openReport;
 
-window.exportPDF=
-  exportPDF;
+window.exportPDF =
+  typeof exportPDF === 'function'
+    ? exportPDF
+    : function(){
+        toast(
+          'PDF export is not available.'
+        );
+      };
 
-window.exportDOCX=
-  exportDOCX;
+window.exportDOCX =
+  typeof exportDOCX === 'function'
+    ? exportDOCX
+    : function(){
+        toast(
+          'DOCX export is not available.'
+        );
+      };
 
-window.exportStaffPDF=
-  exportStaffPDF;
+window.exportStaffPDF =
+  typeof exportStaffPDF === 'function'
+    ? exportStaffPDF
+    : function(){
+        toast(
+          'Staff PDF export is not available.'
+        );
+      };
 
-window.exportProfilePDF=
-  exportProfilePDF;
+window.exportProfilePDF =
+  typeof exportProfilePDF === 'function'
+    ? exportProfilePDF
+    : function(){
+        toast(
+          'Profile PDF export is not available.'
+        );
+      };
 
-window.deleteReport=
+window.deleteReport =
   deleteReport;
 
-window.addDepartment=
+window.addDepartment =
   addDepartment;
 
-window.addPosition=
+window.addPosition =
   addPosition;
 
-window.verifyReport=
+window.reviewReport =
   reviewReport;
 
-window.reviewReport=
+window.verifyReport =
   reviewReport;
 
-window.reviewLeave=
+window.reviewLeave =
   reviewLeave;
 
-window.editLeave=
-  editLeave;
+window.processLeave =
+  processLeave;
 
-window.deleteLeave=
-  deleteLeave;
+window.editLeave =
+  typeof editLeave === 'function'
+    ? editLeave
+    : function(){
+        toast(
+          'Leave editing is not available.'
+        );
+      };
 
-window.downloadAttachment=
-  downloadAttachment;
+window.deleteLeave =
+  typeof deleteLeave === 'function'
+    ? deleteLeave
+    : function(){
+        toast(
+          'Leave deletion is not available.'
+        );
+      };
 
-window.inviteUser=
-  inviteUser;
+window.downloadAttachment =
+  typeof downloadAttachment === 'function'
+    ? downloadAttachment
+    : function(){
+        toast(
+          'Attachment download is not available.'
+        );
+      };
 
-window.editUser=
-  editUser;
+window.inviteUser =
+  typeof inviteUser === 'function'
+    ? inviteUser
+    : function(){
+        toast(
+          'User invitation is not available.'
+        );
+      };
 
-window.saveUser=
-  saveUser;
+window.editUser =
+  typeof editUser === 'function'
+    ? editUser
+    : function(){
+        toast(
+          'User management is not available.'
+        );
+      };
 
-window.saveInstitutionalDay=
-  saveInstitutionalDay;
+window.saveUser =
+  typeof saveUser === 'function'
+    ? saveUser
+    : function(){
+        toast(
+          'User management is not available.'
+        );
+      };
 
-window.deleteInstitutionalDay=
-  deleteInstitutionalDay;
+window.saveInstitutionalDay =
+  typeof saveInstitutionalDay === 'function'
+    ? saveInstitutionalDay
+    : function(){
+        toast(
+          'Institution calendar is not available.'
+        );
+      };
 
-window.calendarDay=
-  calendarDay;
+window.deleteInstitutionalDay =
+  typeof deleteInstitutionalDay === 'function'
+    ? deleteInstitutionalDay
+    : function(){
+        toast(
+          'Institution calendar is not available.'
+        );
+      };
 
-window.viewStaff=
-  viewStaff;
+window.calendarDay =
+  typeof calendarDay === 'function'
+    ? calendarDay
+    : function(){
+        toast(
+          'Calendar details are not available.'
+        );
+      };
 
+window.viewStaff =
+  typeof viewStaff === 'function'
+    ? viewStaff
+    : function(){
+        toast(
+          'Staff details are not available.'
+        );
+      };
 init();
